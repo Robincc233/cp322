@@ -1,0 +1,84 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+# 1. 加载数据
+def load_data(real_path, fake_path):
+    with open(real_path, "r", encoding="utf-8") as f:
+        real_headlines = f.readlines()
+    with open(fake_path, "r", encoding="utf-8") as f:
+        fake_headlines = f.readlines()
+    
+    # 添加标签：real=1, fake=0
+    headlines = real_headlines + fake_headlines
+    labels = [1] * len(real_headlines) + [0] * len(fake_headlines)
+    
+    # 进行文本向量化
+    vectorizer = CountVectorizer()
+    features = vectorizer.fit_transform(headlines)
+
+    # 拆分数据集
+    X_train, X_temp, y_train, y_temp = train_test_split(features, labels, test_size=0.3, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+
+    return X_train, X_val, X_test, y_train, y_val, y_test, vectorizer
+
+# 2. 训练模型并选择最优 max_depth
+def select_model(X_train, y_train, X_val, y_val):
+    max_depths = [2, 5, 10, 20, 50]  # 选择5个不同的 max_depth
+    val_accuracies = []
+
+    for depth in max_depths:
+        model = DecisionTreeClassifier(max_depth=depth, criterion="entropy", random_state=42)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_val)
+        acc = accuracy_score(y_val, y_pred)
+        val_accuracies.append(acc)
+        print(f"max_depth={depth}, Validation Accuracy={acc:.4f}")
+
+    # 绘制 max_depth vs. 验证准确率
+    plt.figure(figsize=(8, 5))
+    plt.plot(max_depths, val_accuracies, marker='o')
+    plt.xlabel("max_depth")
+    plt.ylabel("Validation Accuracy")
+    plt.title("Validation Accuracy vs. max_depth")
+    plt.show()
+
+    # 找到最佳 max_depth
+    best_depth = max_depths[np.argmax(val_accuracies)]
+    return best_depth
+
+# 3. 训练最终模型，并计算测试集准确率
+def train_and_test(X_train, y_train, X_test, y_test, best_depth):
+    model = DecisionTreeClassifier(max_depth=best_depth, criterion="entropy", random_state=42)
+    model.fit(X_train, y_train)
+    y_pred_test = model.predict(X_test)
+    test_acc = accuracy_score(y_test, y_pred_test)
+    print(f"Test Accuracy (best_depth={best_depth}): {test_acc:.4f}")
+    return model
+
+# 4. 可视化决策树前两层
+def visualize_tree(model, vectorizer):
+    plt.figure(figsize=(12, 6))
+    plot_tree(model, feature_names=vectorizer.get_feature_names_out(), class_names=["Fake", "Real"], max_depth=2, filled=True)
+    plt.show()
+
+# 运行代码
+real_path = "/mnt/data/real.txt"
+fake_path = "/mnt/data/fake.txt"
+
+# 加载数据
+X_train, X_val, X_test, y_train, y_val, y_test, vectorizer = load_data(real_path, fake_path)
+
+# 选择最佳 max_depth
+best_depth = select_model(X_train, y_train, X_val, y_val)
+
+# 训练最终模型并评估测试集
+model = train_and_test(X_train, y_train, X_test, y_test, best_depth)
+
+# 可视化决策树
+visualize_tree(model, vectorizer)
